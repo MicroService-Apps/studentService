@@ -201,6 +201,46 @@ exports.config = function(req, res) {
     // to do: configure schema
 };
 
+// handle configuration
+exports.addField = function(req, res) {
+    // get parameters
+    var field = req.params.uni;
+    var fieldParams = new Object();
+    fieldParams[field]="";
+
+    console.log(params);
+
+    // get mongoDB collection
+    var student = db.collection(serviceType);
+
+    //add new field
+
+    student.update({uni:true},{'$push':fieldParams},{multi:true}, function (err,result) {
+        if (err) { // error situation
+            response.status = "failed";
+            response.message = err.toSring();
+
+            res.send(response);
+
+            return;
+        }
+        if(result){
+            response.status = "succeed";
+            response.message = "filed:"+ field + "has been added";
+
+            // log operation
+            log.logMsg(JSON.stringify(params)+"\n", serviceType);
+
+            // send back message
+            res.send(response);
+
+        }
+
+    });
+
+};
+
+
 // function: insert a student entry
 function insertStudent(res, params, student) {
     // define response object
