@@ -5,10 +5,8 @@
 var qs = require('querystring');
 var lr = require("line-reader");
 var path = require('path');
-var async = require('async');
 var db = require('./../utils/mongo.js');
 var log = require('./../utils/logMessage');
-var StudentParams = require('./../utils/studentParams');
 
 var serviceType = 'student';
 
@@ -30,10 +28,10 @@ exports.createStudent = function(req, res) {
     // handle operations
     req.on('end', function () {
         // get parameters
-        var post = qs.parse(body);
-        var name = post['name'];
-        var coursesEnrolled = post['coursesEnrolled'];
-        var params = new StudentParams(uni, name, coursesEnrolled, log.ADD_STUDENT);
+        var params = qs.parse(body);
+        params.uni = uni;
+        params.course = [];
+        params.operation = log.ADD_STUDENT;
 
         console.log(params);
 
@@ -48,8 +46,9 @@ exports.createStudent = function(req, res) {
 // handle delete an existing student
 exports.deleteStudent = function(req, res) {
     // define parameters
-    var uni = req.params.uni;
-    var params = new StudentParams(uni, null, null, log.DELETE_STUDENT);
+    var params = new Object();
+    params.uni = req.params.uni;
+    params.operation = log.DELETE_STUDENT;
 
     // get mongoDB collection
     var student = db.collection(serviceType);
@@ -61,8 +60,9 @@ exports.deleteStudent = function(req, res) {
 // handle read student information
 exports.readStudent = function(req, res) {
     // define parameters
-    var uni = req.params.uni;
-    var params = new StudentParams(uni, null, null, log.READ_STUDENT);
+    var params = new Object();
+    params.uni = req.params.uni;
+    params.operation = log.READ_STUDENT;
 
     // get mongoDB collection
     var student = db.collection(serviceType);
@@ -89,9 +89,9 @@ exports.updateStudent = function(req, res) {
     // handle operations
     req.on('end', function () {
         // get parameters
-        var post = qs.parse(body);
-        var name = post['name'];
-        var params = new StudentParams(uni, name, null, log.UPDATE_STUDENT);
+        var params = qs.parse(body);
+        params.operation = log.UPDATE_STUDENT;
+        params.uni = uni;
 
         console.log(params);
 
@@ -106,9 +106,10 @@ exports.updateStudent = function(req, res) {
 // handle delete course in course list
 exports.deleteCourse = function(req, res) {
     // get parameters
-    var uni = req.params.uni;
-    var course = req.params.cid;
-    var params = new StudentParams(uni, null, course, log.DELETE_COURSE_FROM_STUDENT);
+    var params = new Object();
+    params.uni = req.params.uni;
+    params.course = req.params.cid;
+    params.operation = log.DELETE_COURSE_FROM_STUDENT;
 
     console.log(params);
 
@@ -122,9 +123,10 @@ exports.deleteCourse = function(req, res) {
 // handle add course in course list
 exports.addCourse = function(req, res) {
     // get parameters
-    var uni = req.params.uni;
-    var course = req.params.cid;
-    var params = new StudentParams(uni, null, course, log.ADD_COURSE_INTO_STUDENT);
+    var params = new Object();
+    params.uni = req.params.uni;
+    params.course = req.params.cid;
+    params.operation = log.ADD_COURSE_INTO_STUDENT;
 
     console.log(params);
 
@@ -146,9 +148,7 @@ exports.revert = function(req, res) {
             // handle revert
             var history = JSON.parse(line);
             var operation = history.operation;
-            var params = new StudentParams(history.uni, history.name, history.course, null);
-
-            params.addHistory(history.oldParam);
+            var params = history;
 
             // get mongoDB collection
             var student = db.collection(serviceType);
@@ -156,26 +156,24 @@ exports.revert = function(req, res) {
             switch(operation) {
                 case log.ADD_STUDENT:
                     // revert add student
-                    params.addOperation(log.DELETE_STUDENT);
+                    params.operation = log.DELETE_STUDENT;
                     deleteStudent(res, params, student);
 
                     break;
                 case log.DELETE_STUDENT:
                     // revert delete student
-                    params.addOperation(log.ADD_STUDENT);
+                    params.operation = log.ADD_STUDENT;
                     insertStudent(res, params, student);
 
                     break;
                 case log.UPDATE_STUDENT:
                     // revert update
-                    var history = params.getHistory();
-                    var oldParams = new StudentParams(history.uni, history.name);
-                    updateStudent(res, oldParams, student);
+                    updateStudent(res, params.oldParam, student);
 
                     break;
                 case log.ADD_COURSE_INTO_STUDENT:
                     // revert add course to course list
-                    params.addOperation(log.DELETE_COURSE_FROM_STUDENT);
+                    params.operation = log.DELETE_COURSE_FROM_STUDENT;
                     deleteCourse(res, params, student);
 
                     break;
@@ -183,7 +181,7 @@ exports.revert = function(req, res) {
                     // revert delete course from course list
                     console.log(params);
 
-                    params.addOperation(log.ADD_COURSE_INTO_STUDENT);
+                    params.operation = log.ADD_COURSE_INTO_STUDENT;
                     insertCourse(res, params, student);
 
                     break;
@@ -197,47 +195,41 @@ exports.revert = function(req, res) {
 };
 
 // handle configuration
-exports.config = function(req, res) {
-    // to do: configure schema
-};
-
-// handle configuration
 exports.addField = function(req, res) {
     // get parameters
-    var field = req.params.uni;
+    var field = req.params.field;
     var fieldParams = new Object();
     fieldParams[field]="";
 
-    console.log(params);
+    var logParam = new Object();
+    logParam.operation = log.ADD_FIELD;
+    logParam.field = field;
 
     // get mongoDB collection
     var student = db.collection(serviceType);
 
     //add new field
-
-    student.update({uni:true},{'$push':fieldParams},{multi:true}, function (err,result) {
+    var response = new Object();
+    student.update({},{$set: fieldParams },{multi:true}, function (err,result) {
         if (err) { // error situation
             response.status = "failed";
             response.message = err.toSring();
-
             res.send(response);
 
             return;
         }
+
         if(result){
             response.status = "succeed";
-            response.message = "filed:"+ field + "has been added";
+            response.message = "field: "+ field + " has been added";
 
             // log operation
-            log.logMsg(JSON.stringify(params)+"\n", serviceType);
+            log.logMsg(JSON.stringify(logParam)+"\n", serviceType);
 
             // send back message
             res.send(response);
-
         }
-
     });
-
 };
 
 
@@ -247,15 +239,15 @@ function insertStudent(res, params, student) {
     var response = new Object();
 
     // insert new student into db
-    student.count({uni: params.getUni()}, function(err, count) {
+    student.count({uni: params.uni}, function(err, count) {
         if(count==0){
             // no conflicts
 
-            var name = params.getName();
-            var uni = params.getUni();
-            var courses = params.getCourse().split(",");
+            var name = params.name;
+            var uni = params.uni;
+            var course = params.course;
 
-            student.insert({name: name, uni: uni, coursesEnrolled: courses},
+            student.insert({name: name, uni: uni, coursesEnrolled:course},
                 function(err, result) {
                     if (err) { // error situation
                         response.status = "failed";
@@ -290,7 +282,7 @@ function getStudent(res, params, student) {
     // define response
     var response = new Object();
 
-    if(params.getUni() == "#") {
+    if(params.uni == "all") {
         // get all cids
         student.find({}, {uni: true}).toArray(function(err, results) {
             if(err) {
@@ -310,9 +302,9 @@ function getStudent(res, params, student) {
     } else {
         // get information according to uni
 
-        student.count({uni: params.getUni()}, function (err, count) {
+        student.count({uni: params.uni}, function (err, count) {
             if (count > 0) {
-                student.find({uni: params.getUni()}).toArray(function (err, result) {
+                student.find({uni: params.uni}).toArray(function (err, result) {
                     if (err) {
                         response.status = "failed";
                         response.message = err.toSring();
@@ -343,7 +335,7 @@ function getStudent(res, params, student) {
 // function: delete an existing student
 function deleteStudent(res, params, course) {
     var response = new Object();
-    var uni = params.getUni();
+    var uni = params.uni;
 
     course.findOne({uni: uni}, function(err, result) {
         if(result){
@@ -356,10 +348,12 @@ function deleteStudent(res, params, course) {
                 }
                 else{
                     // add history into parameters
-                    var tmp = new Object();
                     params.name = result["name"];
                     params.uni = result["uni"];
-                    params.course = result["coursesEnrolled"].join();
+
+                    if(result.coursesEnrolled) {
+                        params.course = result["coursesEnrolled"].join();
+                    }
 
                     response.status = "succeed";
                     response.message = "student "+ uni +" removed";
@@ -382,7 +376,7 @@ function deleteStudent(res, params, course) {
 // function: insert student into course list
 function insertCourse(res, params, student) {
     var response = new Object();
-    var uni = params.getUni();
+    var uni = params.uni;
 
     student.findOne({uni: uni}, function(err, result) {
         if (err) { // handling error
@@ -394,8 +388,12 @@ function insertCourse(res, params, student) {
         }
 
         if(result) { // find record
-            var newCourse = params.getCourse();
+            var newCourse = params.course;
             var courseList = result.coursesEnrolled;
+
+            //for(var key in result.coursesEnrolled) {
+            //    courseList.push(key);
+            //}
 
             if(courseList.indexOf(newCourse) == -1) {
                 courseList.push(newCourse);
@@ -435,8 +433,8 @@ function insertCourse(res, params, student) {
 // function: delete course from course list
 function deleteCourse(res, params, student) {
     var response = new Object();
-    var uni = params.getUni();
-    var oldCourse = params.getCourse();
+    var uni = params.uni;
+    var oldCourse = params.course;
 
     // check if need to delete student in all courses ?
     if(uni == 'all') {
@@ -454,6 +452,7 @@ function deleteCourse(res, params, student) {
 
                 result.forEach(function(resultStudent){
                     var courseArr = resultStudent.coursesEnrolled;
+
                     courseArr.splice(courseArr.indexOf(oldCourse),1);
                     student.update({uni: resultStudent["uni"]},{'$set':{coursesEnrolled: courseArr}},function(err,r){
                         if(!err) {
@@ -528,8 +527,15 @@ function deleteCourse(res, params, student) {
 
 // function: update student
 function updateStudent(res, params, student) {
-    var uni = params.getUni();
-    var name = params.getName();
+    var uni = params['uni'];
+    var fieldParams = new Object();
+
+    // build query
+    for(var key in params) {
+        if(key != 'uni' && key != 'operation' && key != 'oldParam' && key != 'course') {
+            fieldParams[key] = params[key];
+        }
+    }
 
     student.findOne({uni: uni}, function (err, oldEntry) {
         var response = new Object();
@@ -543,52 +549,25 @@ function updateStudent(res, params, student) {
         }
 
         if (oldEntry) {
-            async.parallel([
-                //update name
-                function (callback) {
-                    // check if name exists
-                    if(name == null || name == '') {
-                        callback(null, null);
-                        return;
+            student.update({uni: uni}, {'$set': fieldParams}, function (err, r) {
+                if (err) {
+                    response.status = "failed";
+                    response.message = err.toSring();
+                } else {
+                    response.status = "succeed";
+                    response.message = "student " + uni + " has been updated";
+
+                    var oldParams = new Object();
+                    for(var key in params) {
+                        oldParams[key] = oldEntry[key];
                     }
 
-                    student.update({uni: uni}, {'$set': {name: name}}, function (err, r) {
-                        if (err) {
-                            response.status = "failed";
-                            response.message = err.toSring();
+                    params['oldParam'] = oldParams;
+                    log.logMsg(JSON.stringify(params)+'\n', serviceType);
+                }
 
-                            callback(null, response);
-                        } else {
-                            response.status = "succeed";
-                            response.message = "student " + uni + "'s name has been changed to " + name;
-
-                            callback(null, response);
-                        }
-                    });
-                }],
-
-                // handle response and log
-                function (err, results) {
-                    if (err) {
-                        response.status = "failed";
-                        response.message = err.toSring();
-
-                        return res.send(response);
-                    }
-
-                    if(results) {
-                        var resString = "";
-                        var oldParams = new StudentParams(uni, oldEntry['name'], null, null);
-                        params.addHistory(oldParams);
-
-                        if(results[0]) {
-                            resString += JSON.stringify(results[0]);
-                        }
-
-                        log.logMsg(JSON.stringify(params)+'\n', serviceType);
-                        res.send(resString);
-                    }
-                });
+                res.send(response);
+            });
         } else {
             response.status = "failed";
             response.message = "Uni " + uni + " does not exist.";
