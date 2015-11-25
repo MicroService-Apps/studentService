@@ -30,7 +30,8 @@ app.post('/student/:uni', student.updateStudent);
 app.delete('/student/:uni', student.deleteStudent);
 app.delete('/student/:uni/:cid', student.deleteCourse);
 app.patch('/student/revert', student.revert);
-app.patch('/student/config/:field', student.addField);
+app.patch('/student/add/:field', student.addField);
+app.patch('/student/delete/:field', student.deleteField);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

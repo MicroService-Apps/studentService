@@ -194,7 +194,7 @@ exports.revert = function(req, res) {
     });
 };
 
-// handle configuration
+// handle configuration, add field
 exports.addField = function(req, res) {
     // get parameters
     var field = req.params.field;
@@ -232,6 +232,43 @@ exports.addField = function(req, res) {
     });
 };
 
+// handle configuration, delete field
+exports.deleteField = function(req, res) {
+    // get parameters
+    var field = req.params.field;
+    var fieldParams = new Object();
+    fieldParams[field]="";
+
+    var logParam = new Object();
+    logParam.operation = log.DELETE_FIELD;
+    logParam.field = field;
+
+    // get mongoDB collection
+    var student = db.collection(serviceType);
+
+    //add new field
+    var response = new Object();
+    student.update({},{$unset: fieldParams },{multi:true}, function (err,result) {
+        if (err) { // error situation
+            response.status = "failed";
+            response.message = err.toSring();
+            res.send(response);
+
+            return;
+        }
+
+        if(result){
+            response.status = "succeed";
+            response.message = "field: "+ field + " has been removed";
+
+            // log operation
+            log.logMsg(JSON.stringify(logParam)+"\n", serviceType);
+
+            // send back message
+            res.send(response);
+        }
+    });
+};
 
 // function: insert a student entry
 function insertStudent(res, params, student) {
