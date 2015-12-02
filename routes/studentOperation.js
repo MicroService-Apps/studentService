@@ -1,5 +1,5 @@
 /*
- * This file is for action in course service, including CRUD
+ * This file is for action in student service, including CRUD
  */
 
 var qs = require('querystring');
